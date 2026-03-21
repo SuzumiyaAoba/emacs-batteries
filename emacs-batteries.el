@@ -183,6 +183,7 @@
 (defvar outline-minor-mode-cycle)
 (defvar ediff-keep-variants)
 
+(declare-function xterm--init-activate-get-selection "term/xterm" ())
 (declare-function xterm--init-activate-set-selection "term/xterm" ())
 (declare-function prefer-coding-system "mule" (coding-system))
 (declare-function set-default-coding-systems "mule" (coding-system))
@@ -304,6 +305,14 @@ clipboard text saved to the kill ring by character count."
   :type '(choice (const :tag "Disabled" nil)
                  (const :tag "Always save clipboard text" t)
                  integer))
+
+(defcustom emacs-batteries-enable-terminal-clipboard-paste t
+  "Non-nil means enable OSC 52 clipboard paste in terminal Emacs.
+
+When non-nil, xterm-like terminals also allow `yank' to pull from the
+system clipboard.  Disable this if clipboard queries through the terminal
+can block long enough to make `yank' feel slow in your setup."
+  :type 'boolean)
 
 (defcustom emacs-batteries-enable-recentf t
   "Non-nil means enable `recentf-mode'."
@@ -818,15 +827,14 @@ Existing remote-file transforms are preserved."
   (memq (terminal-parameter nil 'terminal-initted)
         '(terminal-init-xterm terminal-init-screen terminal-init-tmux)))
 
-(defun emacs-batteries--enable-terminal-clipboard-copy ()
-  "Enable OSC 52 clipboard copy on supported text terminals.
-
-This only enables kill/copy to the terminal's clipboard bridge.
-Clipboard paste is intentionally left unchanged to avoid query timeouts."
+(defun emacs-batteries--enable-terminal-clipboard-integration ()
+  "Enable OSC 52 clipboard integration on supported text terminals."
   (when (and (not (display-graphic-p))
              (emacs-batteries--xterm-like-terminal-p))
     (require 'term/xterm)
-    (xterm--init-activate-set-selection)))
+    (xterm--init-activate-set-selection)
+    (when emacs-batteries-enable-terminal-clipboard-paste
+      (xterm--init-activate-get-selection))))
 
 (defun emacs-batteries--configure-copy ()
   "Enable conservative clipboard and kill-ring defaults."
@@ -835,8 +843,8 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
         emacs-batteries-save-interprogram-paste-before-kill)
   (when (boundp 'select-enable-clipboard)
     (setq select-enable-clipboard t))
-  (add-hook 'tty-setup-hook #'emacs-batteries--enable-terminal-clipboard-copy)
-  (emacs-batteries--enable-terminal-clipboard-copy))
+  (add-hook 'tty-setup-hook #'emacs-batteries--enable-terminal-clipboard-integration)
+  (emacs-batteries--enable-terminal-clipboard-integration))
 
 (defun emacs-batteries--configure-auto-revert ()
   "Enable conservative auto-revert defaults."

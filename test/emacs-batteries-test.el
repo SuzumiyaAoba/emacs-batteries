@@ -928,22 +928,48 @@
       (should global-auto-revert-mode)
       (should-not emacs-batteries--deferred-functions))))
 
-(ert-deftest emacs-batteries-setup-enables-tty-copy-on-xterm-like-terminals ()
+(ert-deftest emacs-batteries-setup-enables-tty-clipboard-integration-on-xterm-like-terminals ()
   (emacs-batteries-test--with-sandbox
     (let ((original-terminal-initted
            (terminal-parameter nil 'terminal-initted))
           (original-set-selection
-           (terminal-parameter nil 'xterm--set-selection)))
+           (terminal-parameter nil 'xterm--set-selection))
+          (original-get-selection
+           (terminal-parameter nil 'xterm--get-selection)))
       (unwind-protect
           (progn
             (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
             (set-terminal-parameter nil 'xterm--set-selection nil)
+            (set-terminal-parameter nil 'xterm--get-selection nil)
             (emacs-batteries-setup)
-            (should (memq #'emacs-batteries--enable-terminal-clipboard-copy
+            (should (memq #'emacs-batteries--enable-terminal-clipboard-integration
                           tty-setup-hook))
-            (should (eq (terminal-parameter nil 'xterm--set-selection) t)))
+            (should (eq (terminal-parameter nil 'xterm--set-selection) t))
+            (should (eq (terminal-parameter nil 'xterm--get-selection) t)))
         (set-terminal-parameter nil 'terminal-initted original-terminal-initted)
-        (set-terminal-parameter nil 'xterm--set-selection original-set-selection)))))
+        (set-terminal-parameter nil 'xterm--set-selection original-set-selection)
+        (set-terminal-parameter nil 'xterm--get-selection original-get-selection)))))
+
+(ert-deftest emacs-batteries-setup-can-disable-tty-clipboard-paste ()
+  (emacs-batteries-test--with-sandbox
+    (let ((original-terminal-initted
+           (terminal-parameter nil 'terminal-initted))
+          (original-set-selection
+           (terminal-parameter nil 'xterm--set-selection))
+          (original-get-selection
+           (terminal-parameter nil 'xterm--get-selection))
+          (emacs-batteries-enable-terminal-clipboard-paste nil))
+      (unwind-protect
+          (progn
+            (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
+            (set-terminal-parameter nil 'xterm--set-selection nil)
+            (set-terminal-parameter nil 'xterm--get-selection nil)
+            (emacs-batteries-setup)
+            (should (eq (terminal-parameter nil 'xterm--set-selection) t))
+            (should-not (terminal-parameter nil 'xterm--get-selection)))
+        (set-terminal-parameter nil 'terminal-initted original-terminal-initted)
+        (set-terminal-parameter nil 'xterm--set-selection original-set-selection)
+        (set-terminal-parameter nil 'xterm--get-selection original-get-selection)))))
 
 (ert-deftest emacs-batteries-setup-reenables-clipboard-integration ()
   (emacs-batteries-test--with-sandbox

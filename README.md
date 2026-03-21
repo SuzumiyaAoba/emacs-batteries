@@ -118,7 +118,7 @@ TRAMP-related handlers temporarily.
 - save existing clipboard contents to the `kill-ring` before kill commands, with a default 1 MiB size limit
 - prefer short yes/no answers by enabling `use-short-answers`
 - disable dialog boxes by default and use the minibuffer instead
-- enable OSC 52 clipboard copy on xterm-like terminal Emacs sessions
+- enable OSC 52 clipboard copy and paste on xterm-like terminal Emacs sessions
 - prefer loading newer `.el` files over stale `.elc` bytecode with `load-prefer-newer`
 - preserve screen position when scrolling with `scroll-preserve-screen-position`
 - enable `column-number-mode` in the mode line
@@ -432,6 +432,7 @@ The main opt-out variables are:
 - `emacs-batteries-tab-always-indent`
 - `emacs-batteries-completion-cycle-threshold`
 - `emacs-batteries-save-interprogram-paste-before-kill`
+- `emacs-batteries-enable-terminal-clipboard-paste`
 - `emacs-batteries-coding-system`
 - `emacs-batteries-enable-column-number-mode`
 - `emacs-batteries-enable-isearch-lazy-count`
@@ -529,15 +530,17 @@ kill and yank integrated with the system clipboard on macOS and other window
 systems. In Emacs 30.2 with `emacs -Q`, this is already `t` by default, but
 setting it here keeps the behavior stable when another setup had disabled it.
 
-In terminal Emacs, this library enables OSC 52 based clipboard copy on
-xterm-like terminals. This is applied both to the initial terminal and to later
-tty `emacsclient` connections through `tty-setup-hook`.
+In terminal Emacs, this library enables OSC 52 based clipboard copy and paste
+on xterm-like terminals. This is applied both to the initial terminal and to
+later tty `emacsclient` connections through `tty-setup-hook`.
 
 In practice, the supported terminals are the ones initialized through
-`term/xterm.el`, such as `xterm`, `screen`, and `tmux`. This only enables
-kill/copy to the OS clipboard bridge. As in upstream Emacs, clipboard paste is
-not enabled automatically, because querying the terminal can introduce timeout
-cost.
+`term/xterm.el`, such as `xterm`, `screen`, and `tmux`. This keeps kill/copy
+integrated with the OS clipboard bridge and also lets `yank` read from the
+clipboard when the terminal answers OSC 52 selection queries.
+
+If clipboard queries make `yank` feel slow in your terminal or `tmux` setup,
+set `emacs-batteries-enable-terminal-clipboard-paste` to `nil`.
 
 In addition, this library enables `save-interprogram-paste-before-kill` with a
 size limit. That preserves existing clipboard contents in the `kill-ring`
@@ -545,7 +548,8 @@ before an Emacs kill command overwrites the clipboard. The default limit is
 1 MiB.
 
 If your outer terminal emulator or `tmux` blocks OSC 52, this setting alone may
-not be enough to reach the system clipboard.
+not be enough to reach the system clipboard, and clipboard paste may need the
+opt-out above.
 
 ## References
 
