@@ -163,6 +163,8 @@
 (defvar find-library-include-other-files)
 (defvar outline-minor-mode-cycle)
 (defvar ediff-keep-variants)
+(defvar native-comp-async-report-warnings-errors)
+(defvar x-underline-at-descent-line)
 
 (defconst emacs-batteries-test--baseline-values
   `((history-length . ,history-length)
@@ -343,7 +345,53 @@
     (url-privacy-level . ,url-privacy-level)
     (isearch-allow-scroll . ,isearch-allow-scroll)
     (comint-scroll-to-bottom-on-input . ,comint-scroll-to-bottom-on-input)
-    (ediff-keep-variants . ,ediff-keep-variants))
+    (ediff-keep-variants . ,ediff-keep-variants)
+    (display-time-default-load-average
+     . ,(and (boundp 'display-time-default-load-average) display-time-default-load-average))
+    (xref-history-storage . ,(and (boundp 'xref-history-storage) xref-history-storage))
+    (find-library-include-other-files
+     . ,(and (boundp 'find-library-include-other-files) find-library-include-other-files))
+    (isearch-wrap-pause . ,(and (boundp 'isearch-wrap-pause) isearch-wrap-pause))
+    (lazy-highlight-buffer . ,(and (boundp 'lazy-highlight-buffer) lazy-highlight-buffer))
+    (grep-use-headings . ,(and (boundp 'grep-use-headings) grep-use-headings))
+    (dired-movement-style . ,(and (boundp 'dired-movement-style) dired-movement-style))
+    (dired-vc-rename-file . ,(and (boundp 'dired-vc-rename-file) dired-vc-rename-file))
+    (eshell-history-append . ,(and (boundp 'eshell-history-append) eshell-history-append))
+    (shell-kill-buffer-on-exit . ,(and (boundp 'shell-kill-buffer-on-exit) shell-kill-buffer-on-exit))
+    (compilation-max-output-line-length
+     . ,(and (boundp 'compilation-max-output-line-length) compilation-max-output-line-length))
+    (help-window-keep-selected
+     . ,(and (boundp 'help-window-keep-selected) help-window-keep-selected))
+    (switch-to-buffer-in-dedicated-window
+     . ,(and (boundp 'switch-to-buffer-in-dedicated-window) switch-to-buffer-in-dedicated-window))
+    (what-cursor-show-names . ,(and (boundp 'what-cursor-show-names) what-cursor-show-names))
+    (completions-header-format
+     . ,(and (boundp 'completions-header-format) completions-header-format))
+    (help-enable-variable-value-editing
+     . ,(and (boundp 'help-enable-variable-value-editing) help-enable-variable-value-editing))
+    (register-use-preview . ,(and (boundp 'register-use-preview) register-use-preview))
+    (tab-bar-show . ,(and (boundp 'tab-bar-show) tab-bar-show))
+    (outline-minor-mode-cycle
+     . ,(and (boundp 'outline-minor-mode-cycle) outline-minor-mode-cycle))
+    (project-mode-line . ,(and (boundp 'project-mode-line) project-mode-line))
+    (describe-bindings-outline
+     . ,(and (boundp 'describe-bindings-outline) describe-bindings-outline))
+    (imenu-flatten . ,(and (boundp 'imenu-flatten) imenu-flatten))
+    (native-compile-prune-cache
+     . ,(and (boundp 'native-compile-prune-cache) native-compile-prune-cache))
+    (native-comp-async-report-warnings-errors
+     . ,(and (boundp 'native-comp-async-report-warnings-errors)
+             native-comp-async-report-warnings-errors))
+    (global-text-scale-adjust-resizes-frames
+     . ,(and (boundp 'global-text-scale-adjust-resizes-frames)
+             global-text-scale-adjust-resizes-frames))
+    (proced-enable-color-flag
+     . ,(and (boundp 'proced-enable-color-flag) proced-enable-color-flag))
+    (read-minibuffer-restore-windows
+     . ,(and (boundp 'read-minibuffer-restore-windows) read-minibuffer-restore-windows))
+    (text-mode-ispell-word-completion
+     . ,(and (boundp 'text-mode-ispell-word-completion) text-mode-ispell-word-completion))
+    (completions-sort . ,(and (boundp 'completions-sort) completions-sort)))
   "Baseline values captured before tests mutate global state.")
 
 (defun emacs-batteries-test--disable-managed-modes ()
@@ -359,6 +407,14 @@
                   editorconfig-mode))
     (when (symbol-value mode)
       (funcall mode -1)))
+  (when (and (fboundp 'global-visual-wrap-prefix-mode)
+             (boundp 'visual-wrap-prefix-mode)
+             (bound-and-true-p global-visual-wrap-prefix-mode))
+    (global-visual-wrap-prefix-mode -1))
+  (when (and (fboundp 'global-kill-ring-deindent-mode)
+             (boundp 'kill-ring-deindent-mode)
+             (bound-and-true-p global-kill-ring-deindent-mode))
+    (global-kill-ring-deindent-mode -1))
   (when (timerp savehist-timer)
     (cancel-timer savehist-timer)
     (setq savehist-timer nil)))
@@ -533,6 +589,8 @@
                   after-change-major-mode-hook))
     (should (memq #'goto-address-prog-mode prog-mode-hook))
     (should-not blink-matching-paren)
+    (when (boundp 'display-time-default-load-average)
+      (should-not display-time-default-load-average))
     (should (= large-file-warning-threshold
                emacs-batteries-large-file-warning-threshold))
     (should-not eldoc-echo-area-use-multiline-p)
@@ -727,6 +785,108 @@
       (with-temp-buffer
         (emacs-lisp-mode)
         (should-not (bound-and-true-p electric-pair-mode))))))
+
+(ert-deftest emacs-batteries-setup-configures-search-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'xref-history-storage)
+      (should (eq xref-history-storage 'xref-window-local-history)))
+    (when (boundp 'find-library-include-other-files)
+      (should-not find-library-include-other-files))
+    (when (boundp 'isearch-wrap-pause)
+      (should (eq isearch-wrap-pause 'no)))
+    (when (boundp 'lazy-highlight-buffer)
+      (should lazy-highlight-buffer))
+    (when (boundp 'grep-use-headings)
+      (should grep-use-headings))))
+
+(ert-deftest emacs-batteries-setup-configures-dired-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'dired-movement-style)
+      (should (eq dired-movement-style 'bounded)))
+    (when (boundp 'dired-vc-rename-file)
+      (should dired-vc-rename-file))))
+
+(ert-deftest emacs-batteries-setup-configures-shell-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'eshell-history-append)
+      (should eshell-history-append))
+    (when (boundp 'shell-kill-buffer-on-exit)
+      (should shell-kill-buffer-on-exit))))
+
+(ert-deftest emacs-batteries-setup-configures-compilation-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'compilation-max-output-line-length)
+      (should-not compilation-max-output-line-length))))
+
+(ert-deftest emacs-batteries-setup-configures-diff-enables-kill-ring-deindent ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (fboundp 'global-kill-ring-deindent-mode)
+      (should (bound-and-true-p global-kill-ring-deindent-mode)))))
+
+(ert-deftest emacs-batteries-setup-configures-window-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'help-window-keep-selected)
+      (should help-window-keep-selected))
+    (when (boundp 'switch-to-buffer-in-dedicated-window)
+      (should (eq switch-to-buffer-in-dedicated-window 'pop)))))
+
+(ert-deftest emacs-batteries-setup-configures-display-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'what-cursor-show-names)
+      (should what-cursor-show-names))
+    (when (boundp 'completions-header-format)
+      (should-not completions-header-format))
+    (when (boundp 'help-enable-variable-value-editing)
+      (should help-enable-variable-value-editing))
+    (when (boundp 'register-use-preview)
+      (should register-use-preview))
+    (when (boundp 'tab-bar-show)
+      (should (= tab-bar-show 1)))
+    (when (boundp 'outline-minor-mode-cycle)
+      (should outline-minor-mode-cycle))
+    (when (boundp 'project-mode-line)
+      (should project-mode-line))
+    (when (boundp 'describe-bindings-outline)
+      (should describe-bindings-outline))
+    (when (boundp 'imenu-flatten)
+      (should (eq imenu-flatten 'prefix)))
+    (when (fboundp 'global-visual-wrap-prefix-mode)
+      (should (bound-and-true-p global-visual-wrap-prefix-mode)))))
+
+(ert-deftest emacs-batteries-setup-configures-performance-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'native-compile-prune-cache)
+      (should native-compile-prune-cache))
+    (when (boundp 'native-comp-async-report-warnings-errors)
+      (should (eq native-comp-async-report-warnings-errors 'silent)))
+    (when (boundp 'global-text-scale-adjust-resizes-frames)
+      (should-not global-text-scale-adjust-resizes-frames))
+    (when (boundp 'x-underline-at-descent-line)
+      (should x-underline-at-descent-line))
+    (when (boundp 'proced-enable-color-flag)
+      (should proced-enable-color-flag))))
+
+(ert-deftest emacs-batteries-setup-configures-minibuffer-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'read-minibuffer-restore-windows)
+      (should-not read-minibuffer-restore-windows))))
+
+(ert-deftest emacs-batteries-setup-configures-editing-extended-defaults ()
+  (emacs-batteries-test--with-sandbox
+    (emacs-batteries-setup)
+    (when (boundp 'text-mode-ispell-word-completion)
+      (should-not text-mode-ispell-word-completion))
+    (when (boundp 'completions-sort)
+      (should (eq completions-sort 'historical)))))
 
 (ert-deftest emacs-batteries-setup-enables-tty-copy-on-xterm-like-terminals ()
   (emacs-batteries-test--with-sandbox
