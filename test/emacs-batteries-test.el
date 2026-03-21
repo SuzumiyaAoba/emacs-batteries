@@ -88,6 +88,7 @@
 (defvar compilation-always-kill)
 (defvar compilation-ask-about-save)
 (defvar save-abbrevs)
+(defvar select-enable-clipboard)
 (defvar gnutls-verify-error)
 (defvar gnutls-min-prime-bits)
 (defvar imenu-auto-rescan)
@@ -248,6 +249,7 @@
     (kept-new-versions . ,kept-new-versions)
     (kept-old-versions . ,kept-old-versions)
     (kill-do-not-save-duplicates . ,kill-do-not-save-duplicates)
+    (select-enable-clipboard . ,select-enable-clipboard)
     (save-interprogram-paste-before-kill
      . ,save-interprogram-paste-before-kill)
     (tty-setup-hook . ,(copy-tree tty-setup-hook))
@@ -513,6 +515,7 @@
     (should (eq ring-bell-function emacs-batteries-ring-bell-function))
     (should (= save-interprogram-paste-before-kill
                emacs-batteries-save-interprogram-paste-before-kill))
+    (should select-enable-clipboard)
     (should (memq #'emacs-batteries--maybe-enable-electric-pair
                   after-change-major-mode-hook))
     (should load-prefer-newer)
@@ -941,6 +944,12 @@
             (should (eq (terminal-parameter nil 'xterm--set-selection) t)))
         (set-terminal-parameter nil 'terminal-initted original-terminal-initted)
         (set-terminal-parameter nil 'xterm--set-selection original-set-selection)))))
+
+(ert-deftest emacs-batteries-setup-reenables-clipboard-integration ()
+  (emacs-batteries-test--with-sandbox
+    (let ((select-enable-clipboard nil))
+      (emacs-batteries-setup)
+      (should select-enable-clipboard))))
 
 (ert-deftest emacs-batteries-setup-applies-darwin-utf-8-profile ()
   (emacs-batteries-test--with-sandbox

@@ -47,6 +47,7 @@
 (defvar redisplay-skip-fontification-on-input)
 (defvar ring-bell-function)
 (defvar backup-by-copying)
+(defvar select-enable-clipboard)
 (defvar save-interprogram-paste-before-kill)
 (defvar global-auto-revert-non-file-buffers)
 (defvar use-dialog-box)
@@ -832,6 +833,8 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
   (setq kill-do-not-save-duplicates t
         save-interprogram-paste-before-kill
         emacs-batteries-save-interprogram-paste-before-kill)
+  (when (boundp 'select-enable-clipboard)
+    (setq select-enable-clipboard t))
   (add-hook 'tty-setup-hook #'emacs-batteries--enable-terminal-clipboard-copy)
   (emacs-batteries--enable-terminal-clipboard-copy))
 

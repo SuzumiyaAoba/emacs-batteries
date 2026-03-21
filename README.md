@@ -114,6 +114,7 @@ TRAMP-related handlers temporarily.
 - set `completion-cycle-threshold` to `3`
 - remove duplicate history entries and raise history length to 1000
 - avoid saving duplicate trailing entries in the `kill-ring`
+- enable `select-enable-clipboard` for system clipboard integration
 - save existing clipboard contents to the `kill-ring` before kill commands, with a default 1 MiB size limit
 - prefer short yes/no answers by enabling `use-short-answers`
 - disable dialog boxes by default and use the minibuffer instead
@@ -523,9 +524,10 @@ environment is not already UTF-8 based.
 
 ## Clipboard on macOS and TTY Emacs
 
-In GUI Emacs, kill and yank are normally integrated with the system clipboard
-already. In Emacs 30.2 with `emacs -Q`, `select-enable-clipboard` is `t` by
-default.
+This library explicitly enables `select-enable-clipboard`, so GUI Emacs keeps
+kill and yank integrated with the system clipboard on macOS and other window
+systems. In Emacs 30.2 with `emacs -Q`, this is already `t` by default, but
+setting it here keeps the behavior stable when another setup had disabled it.
 
 In terminal Emacs, this library enables OSC 52 based clipboard copy on
 xterm-like terminals. This is applied both to the initial terminal and to later
