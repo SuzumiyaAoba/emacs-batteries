@@ -461,6 +461,29 @@ The main opt-out variables are:
 - `emacs-batteries-show-trailing-whitespace-in-prog-mode`
 - `emacs-batteries-enable-goto-address-in-prog-mode`
 - `emacs-batteries-large-file-warning-threshold`
+- `emacs-batteries-defer-setup`
+
+## Deferred Loading
+
+By default (`emacs-batteries-defer-setup` is `t`), `emacs-batteries-setup`
+defers require-heavy configuration to `emacs-startup-hook` and applies
+feature-specific settings lazily via `with-eval-after-load`:
+
+- **Deferred to `emacs-startup-hook`**: savehist, saveplace, recentf,
+  auto-revert, uniquify, which-key, editorconfig — these call `(require ...)`
+  and enable global modes, so deferring them avoids file I/O during init.
+
+- **Deferred via `with-eval-after-load`**: dired, ediff, compile, comint,
+  eshell, tramp, diff-mode, gnutls, epg, url — these only set variables and
+  are applied when the corresponding feature is first loaded.
+
+Set `emacs-batteries-defer-setup` to `nil` to run all configuration
+synchronously:
+
+```elisp
+(setq emacs-batteries-defer-setup nil)
+(emacs-batteries-setup)
+```
 
 ## Intentionally Excluded
 

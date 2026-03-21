@@ -39,6 +39,8 @@
 (require 'comint)
 (require 'tramp)
 (require 'diff-mode)
+(require 'esh-mode)
+(require 'url)
 (require 'emacs-batteries)
 
 (defvar emacs-batteries-bootstrap-cache-file)
@@ -419,6 +421,11 @@
     (cancel-timer savehist-timer)
     (setq savehist-timer nil)))
 
+(defun emacs-batteries-test--flush-deferred ()
+  "Run any deferred setup functions immediately."
+  (when (fboundp 'emacs-batteries--run-deferred)
+    (emacs-batteries--run-deferred)))
+
 (defmacro emacs-batteries-test--with-sandbox (&rest body)
   "Run BODY with isolated state for `emacs-batteries'."
   (declare (indent 0) (debug t))
@@ -429,10 +436,12 @@
      (unwind-protect
          (progn
            (emacs-batteries-test--disable-managed-modes)
+           (setq emacs-batteries--deferred-functions nil)
            (dolist (cell emacs-batteries-test--baseline-values)
              (set (car cell) (copy-tree (cdr cell))))
            ,@body)
        (emacs-batteries-test--disable-managed-modes)
+       (setq emacs-batteries--deferred-functions nil)
        (delete-directory temp-directory t))))
 
 (defun emacs-batteries-test--fixture-path (path)
@@ -887,6 +896,34 @@
       (should-not text-mode-ispell-word-completion))
     (when (boundp 'completions-sort)
       (should (eq completions-sort 'historical)))))
+
+(ert-deftest emacs-batteries-setup-defers-require-heavy-functions-during-startup ()
+  (emacs-batteries-test--with-sandbox
+    (let ((after-init-time nil)
+          (emacs-batteries-defer-setup t))
+      (emacs-batteries-setup)
+      ;; Deferred functions should be pending.
+      (should emacs-batteries--deferred-functions)
+      (should (memq #'emacs-batteries--run-deferred emacs-startup-hook))
+      ;; savehist etc. should not yet be active.
+      (should-not savehist-mode)
+      (should-not save-place-mode)
+      ;; Flush and verify.
+      (emacs-batteries-test--flush-deferred)
+      (should savehist-mode)
+      (should save-place-mode)
+      (should-not emacs-batteries--deferred-functions)
+      (should-not (memq #'emacs-batteries--run-deferred emacs-startup-hook)))))
+
+(ert-deftest emacs-batteries-setup-runs-immediately-when-defer-disabled ()
+  (emacs-batteries-test--with-sandbox
+    (let ((emacs-batteries-defer-setup nil))
+      (emacs-batteries-setup)
+      (should savehist-mode)
+      (should save-place-mode)
+      (should recentf-mode)
+      (should global-auto-revert-mode)
+      (should-not emacs-batteries--deferred-functions))))
 
 (ert-deftest emacs-batteries-setup-enables-tty-copy-on-xterm-like-terminals ()
   (emacs-batteries-test--with-sandbox

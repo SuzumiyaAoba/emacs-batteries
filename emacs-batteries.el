@@ -537,11 +537,56 @@ Nil means never warn."
   :type '(choice (const :tag "Never warn" nil)
                  integer))
 
+(defcustom emacs-batteries-defer-setup t
+  "Non-nil means defer require-heavy setup to `emacs-startup-hook'.
+
+When non-nil, functions that call `require' and enable global modes
+\(savehist, saveplace, recentf, auto-revert, uniquify, which-key,
+editorconfig) are deferred until after startup completes, and
+feature-specific settings (dired, ediff, compile, comint, eshell,
+tramp, diff-mode, gnutls, epg, url) are applied lazily via
+`with-eval-after-load'.
+
+When nil, all configuration runs synchronously inside
+`emacs-batteries-setup'."
+  :type 'boolean)
+
 (defvar emacs-batteries--saved-gc-cons-threshold nil
   "Saved `gc-cons-threshold' before `emacs-batteries' startup tuning.")
 
 (defvar emacs-batteries--saved-gc-cons-percentage nil
   "Saved `gc-cons-percentage' before `emacs-batteries' startup tuning.")
+
+(defvar emacs-batteries--deferred-functions nil
+  "List of functions deferred to `emacs-startup-hook'.")
+
+(defun emacs-batteries--run-deferred ()
+  "Run all deferred configure functions and clean up."
+  (dolist (fn (nreverse emacs-batteries--deferred-functions))
+    (funcall fn))
+  (setq emacs-batteries--deferred-functions nil)
+  (remove-hook 'emacs-startup-hook #'emacs-batteries--run-deferred))
+
+(defun emacs-batteries--defer-or-run (function)
+  "Defer FUNCTION to `emacs-startup-hook' or run it immediately.
+When `emacs-batteries-defer-setup' is nil, or when startup has
+already completed, FUNCTION runs immediately."
+  (if (or (not emacs-batteries-defer-setup)
+          after-init-time)
+      (funcall function)
+    (push function emacs-batteries--deferred-functions)
+    (unless (memq #'emacs-batteries--run-deferred emacs-startup-hook)
+      (add-hook 'emacs-startup-hook #'emacs-batteries--run-deferred))))
+
+(defun emacs-batteries--configure-after-load (feature function)
+  "Arrange to call FUNCTION after FEATURE is loaded.
+If `emacs-batteries-defer-setup' is nil or FEATURE is already
+loaded, call FUNCTION immediately."
+  (if (or (not emacs-batteries-defer-setup)
+          (featurep feature))
+      (funcall function)
+    (with-eval-after-load feature
+      (funcall function))))
 
 (defun emacs-batteries--state-path (path)
   "Expand PATH under `emacs-batteries-state-directory'."
@@ -955,6 +1000,13 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
     (when (fboundp 'global-visual-wrap-prefix-mode)
       (global-visual-wrap-prefix-mode -1)))
   (column-number-mode (if emacs-batteries-enable-column-number-mode 1 -1))
+  (context-menu-mode
+   (if emacs-batteries-enable-context-menu-mode 1 -1))
+  (emacs-batteries--defer-or-run
+   #'emacs-batteries--configure-display-deferred))
+
+(defun emacs-batteries--configure-display-deferred ()
+  "Enable display features that require loading packages."
   (when emacs-batteries-enable-uniquify
     (require 'uniquify)
     (setq uniquify-buffer-name-style
@@ -965,8 +1017,6 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
         (which-key-mode 1))
     (when (featurep 'which-key)
       (which-key-mode -1)))
-  (context-menu-mode
-   (if emacs-batteries-enable-context-menu-mode 1 -1))
   (if emacs-batteries-enable-editorconfig
       (progn
         (require 'editorconfig)
@@ -1106,9 +1156,51 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
   (when (boundp 'shell-kill-buffer-on-exit)
     (setq shell-kill-buffer-on-exit t)))
 
+(defun emacs-batteries--configure-shell-comint ()
+  "Configure comint defaults."
+  (setq comint-prompt-read-only t
+        comint-scroll-to-bottom-on-input 'this))
+
+(defun emacs-batteries--configure-shell-eshell ()
+  "Configure eshell defaults."
+  (when (boundp 'eshell-history-append)
+    (setq eshell-history-append t)))
+
+(defun emacs-batteries--configure-shell-tramp ()
+  "Configure tramp defaults."
+  (setq tramp-verbose 1)
+  (when (boundp 'shell-kill-buffer-on-exit)
+    (setq shell-kill-buffer-on-exit t)))
+
+(defun emacs-batteries--configure-security-gnutls ()
+  "Configure GnuTLS defaults."
+  (when emacs-batteries-gnutls-verify-error
+    (setq gnutls-verify-error t
+          gnutls-min-prime-bits 3072)))
+
+(defun emacs-batteries--configure-security-epg ()
+  "Configure EPG defaults."
+  (setq epg-pinentry-mode 'loopback))
+
+(defun emacs-batteries--configure-security-url ()
+  "Configure URL privacy defaults."
+  (setq url-privacy-level 'high))
+
 (defun emacs-batteries--configure-diff ()
   "Enable conservative diff defaults."
   (setq diff-refine t)
+  (if emacs-batteries-enable-kill-ring-deindent
+      (when (fboundp 'global-kill-ring-deindent-mode)
+        (global-kill-ring-deindent-mode 1))
+    (when (fboundp 'global-kill-ring-deindent-mode)
+      (global-kill-ring-deindent-mode -1))))
+
+(defun emacs-batteries--configure-diff-variables ()
+  "Configure diff-mode variables."
+  (setq diff-refine t))
+
+(defun emacs-batteries--configure-diff-global ()
+  "Configure global kill-ring-deindent mode."
   (if emacs-batteries-enable-kill-ring-deindent
       (when (fboundp 'global-kill-ring-deindent-mode)
         (global-kill-ring-deindent-mode 1))
@@ -1126,31 +1218,60 @@ Clipboard paste is intentionally left unchanged to avoid query timeouts."
 (defun emacs-batteries-setup ()
   "Enable conservative built-in defaults.
 
-Call this early from the init file."
+Call this early from the init file.
+
+When `emacs-batteries-defer-setup' is non-nil, require-heavy
+configuration is deferred to `emacs-startup-hook' and
+feature-specific settings are applied lazily via
+`with-eval-after-load'."
   (interactive)
+  ;; Reset deferred list for idempotency.
+  (setq emacs-batteries--deferred-functions nil)
+
+  ;; Phase 1: Immediate — no require, needed before first frame/input.
   (emacs-batteries--configure-startup-gc)
   (emacs-batteries--configure-coding)
-  (emacs-batteries--configure-savehist)
-  (emacs-batteries--configure-saveplace)
   (emacs-batteries--configure-minibuffer)
   (emacs-batteries--configure-window-behavior)
-  (emacs-batteries--configure-recentf)
   (emacs-batteries--configure-file-safety)
   (emacs-batteries--configure-performance)
   (emacs-batteries--configure-editing)
-  (emacs-batteries--configure-auto-revert)
   (emacs-batteries--configure-copy)
   (emacs-batteries--configure-display)
   (emacs-batteries--configure-search)
-  (emacs-batteries--configure-dired)
-  (emacs-batteries--configure-ediff)
-  (emacs-batteries--configure-compilation)
-  (emacs-batteries--configure-security)
   (emacs-batteries--configure-eval)
   (emacs-batteries--configure-prog-mode)
-  (emacs-batteries--configure-shell)
-  (emacs-batteries--configure-diff)
-  (emacs-batteries--enable-disabled-commands))
+  (emacs-batteries--enable-disabled-commands)
+
+  ;; Phase 2: Deferred — require + mode activation.
+  (emacs-batteries--defer-or-run #'emacs-batteries--configure-savehist)
+  (emacs-batteries--defer-or-run #'emacs-batteries--configure-saveplace)
+  (emacs-batteries--defer-or-run #'emacs-batteries--configure-recentf)
+  (emacs-batteries--defer-or-run #'emacs-batteries--configure-auto-revert)
+
+  ;; Phase 3: After-load — feature-specific variable-only settings.
+  (emacs-batteries--configure-after-load 'dired
+    #'emacs-batteries--configure-dired)
+  (emacs-batteries--configure-after-load 'ediff
+    #'emacs-batteries--configure-ediff)
+  (emacs-batteries--configure-after-load 'compile
+    #'emacs-batteries--configure-compilation)
+  (emacs-batteries--configure-after-load 'comint
+    #'emacs-batteries--configure-shell-comint)
+  (emacs-batteries--configure-after-load 'esh-mode
+    #'emacs-batteries--configure-shell-eshell)
+  (emacs-batteries--configure-after-load 'tramp
+    #'emacs-batteries--configure-shell-tramp)
+  (emacs-batteries--configure-after-load 'diff-mode
+    #'emacs-batteries--configure-diff-variables)
+  (emacs-batteries--configure-after-load 'gnutls
+    #'emacs-batteries--configure-security-gnutls)
+  (emacs-batteries--configure-after-load 'epg
+    #'emacs-batteries--configure-security-epg)
+  (emacs-batteries--configure-after-load 'url
+    #'emacs-batteries--configure-security-url)
+  ;; kill-ring-deindent is a global mode — keep immediate.
+  (emacs-batteries--configure-diff-global))
 
 (provide 'emacs-batteries)
 
