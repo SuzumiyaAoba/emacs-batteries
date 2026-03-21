@@ -396,7 +396,7 @@ clipboard text saved to the kill ring by character count."
   :type '(choice (const :tag "Disabled" nil)
                  function))
 
-(defcustom emacs-batteries-confirm-kill-emacs 'y-or-n-p
+(defcustom emacs-batteries-confirm-kill-emacs nil
   "Value assigned to `confirm-kill-emacs'."
   :type '(choice (const :tag "Disabled" nil)
                  function))
