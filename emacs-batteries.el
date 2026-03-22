@@ -49,6 +49,7 @@
 (defvar backup-by-copying)
 (defvar select-enable-clipboard)
 (defvar save-interprogram-paste-before-kill)
+(defvar interprogram-paste-function)
 (defvar global-auto-revert-non-file-buffers)
 (defvar use-dialog-box)
 (defvar use-short-answers)
@@ -185,6 +186,7 @@
 
 (declare-function xterm--init-activate-get-selection "term/xterm" ())
 (declare-function xterm--init-activate-set-selection "term/xterm" ())
+(declare-function gui-get-selection "select" (&optional type data-type))
 (declare-function prefer-coding-system "mule" (coding-system))
 (declare-function set-default-coding-systems "mule" (coding-system))
 (declare-function set-selection-coding-system "mule-cmds" (coding-system))
@@ -221,6 +223,7 @@
 (declare-function global-kill-ring-deindent-mode "kill-ring-deindent"
                   (&optional arg))
 (declare-function goto-address-prog-mode "goto-addr" ())
+(autoload 'dnd-get-local-file-name "dnd")
 
 (defgroup emacs-batteries nil
   "Conservative built-in defaults for Emacs."
@@ -570,6 +573,12 @@ When nil, all configuration runs synchronously inside
 (defvar emacs-batteries--deferred-functions nil
   "List of functions deferred to `emacs-startup-hook'.")
 
+(defvar emacs-batteries--interprogram-paste-base-function nil
+  "Base `interprogram-paste-function' wrapped by emacs-batteries.")
+
+(defvar emacs-batteries--last-macos-file-clipboard-paste nil
+  "Last Finder file clipboard payload returned by emacs-batteries.")
+
 (defun emacs-batteries--run-deferred ()
   "Run all deferred configure functions and clean up."
   (dolist (fn (nreverse emacs-batteries--deferred-functions))
@@ -827,6 +836,47 @@ Existing remote-file transforms are preserved."
   (memq (terminal-parameter nil 'terminal-initted)
         '(terminal-init-xterm terminal-init-screen terminal-init-tmux)))
 
+(defun emacs-batteries--clipboard-file-line-to-path (line)
+  "Return a local path decoded from clipboard LINE, or nil.
+Clipboard file data is usually delivered as file URLs, but macOS can
+also expose absolute paths in some cases."
+  (cond
+   ((or (string-empty-p line)
+        (string-prefix-p "#" line))
+    nil)
+   ((string-prefix-p "file:" line)
+    (dnd-get-local-file-name line))
+   ((file-name-absolute-p line)
+    line)))
+
+(defun emacs-batteries--macos-file-clipboard-paste ()
+  "Return Finder-copied files from the macOS clipboard as newline text.
+Return nil when the clipboard does not currently contain local files, or
+when the same file payload was already returned earlier."
+  (when (and (eq system-type 'darwin)
+             (eq window-system 'ns))
+    (let* ((raw (ignore-errors
+                  (gui-get-selection 'CLIPBOARD 'text/plain)))
+           (files
+            (and (stringp raw)
+                 (delq nil
+                       (mapcar #'emacs-batteries--clipboard-file-line-to-path
+                               (split-string raw "[\0\r\n]+" t))))))
+      (when files
+        (let ((text (mapconcat #'identity files "\n")))
+          (unless (equal text emacs-batteries--last-macos-file-clipboard-paste)
+            (setq emacs-batteries--last-macos-file-clipboard-paste text)
+            text))))))
+
+(defun emacs-batteries--interprogram-paste ()
+  "Return clipboard text, with a macOS file clipboard fallback.
+The configured base `interprogram-paste-function' runs first.  On macOS
+GUI Emacs, if it returns nil, Finder file copies are converted to local
+paths so plain `yank' can paste them."
+  (or (when (functionp emacs-batteries--interprogram-paste-base-function)
+        (funcall emacs-batteries--interprogram-paste-base-function))
+      (emacs-batteries--macos-file-clipboard-paste)))
+
 (defun emacs-batteries--enable-terminal-clipboard-integration ()
   "Enable OSC 52 clipboard integration on supported text terminals."
   (when (and (not (display-graphic-p))
@@ -843,6 +893,12 @@ Existing remote-file transforms are preserved."
         emacs-batteries-save-interprogram-paste-before-kill)
   (when (boundp 'select-enable-clipboard)
     (setq select-enable-clipboard t))
+  (unless (eq interprogram-paste-function
+              #'emacs-batteries--interprogram-paste)
+    (setq emacs-batteries--interprogram-paste-base-function
+          interprogram-paste-function
+          interprogram-paste-function
+          #'emacs-batteries--interprogram-paste))
   (add-hook 'tty-setup-hook #'emacs-batteries--enable-terminal-clipboard-integration)
   (emacs-batteries--enable-terminal-clipboard-integration))
 

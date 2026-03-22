@@ -89,6 +89,7 @@
 (defvar compilation-ask-about-save)
 (defvar save-abbrevs)
 (defvar select-enable-clipboard)
+(defvar interprogram-paste-function)
 (defvar gnutls-verify-error)
 (defvar gnutls-min-prime-bits)
 (defvar imenu-auto-rescan)
@@ -168,6 +169,8 @@
 (defvar ediff-keep-variants)
 (defvar native-comp-async-report-warnings-errors)
 (defvar x-underline-at-descent-line)
+(defvar emacs-batteries--interprogram-paste-base-function)
+(defvar emacs-batteries--last-macos-file-clipboard-paste)
 
 (defconst emacs-batteries-test--baseline-values
   `((history-length . ,history-length)
@@ -250,6 +253,7 @@
     (kept-old-versions . ,kept-old-versions)
     (kill-do-not-save-duplicates . ,kill-do-not-save-duplicates)
     (select-enable-clipboard . ,select-enable-clipboard)
+    (interprogram-paste-function . ,interprogram-paste-function)
     (save-interprogram-paste-before-kill
      . ,save-interprogram-paste-before-kill)
     (tty-setup-hook . ,(copy-tree tty-setup-hook))
@@ -386,6 +390,10 @@
     (native-comp-async-report-warnings-errors
      . ,(and (boundp 'native-comp-async-report-warnings-errors)
              native-comp-async-report-warnings-errors))
+    (emacs-batteries--interprogram-paste-base-function
+     . ,emacs-batteries--interprogram-paste-base-function)
+    (emacs-batteries--last-macos-file-clipboard-paste
+     . ,emacs-batteries--last-macos-file-clipboard-paste)
     (global-text-scale-adjust-resizes-frames
      . ,(and (boundp 'global-text-scale-adjust-resizes-frames)
              global-text-scale-adjust-resizes-frames))
@@ -516,6 +524,8 @@
     (should (= save-interprogram-paste-before-kill
                emacs-batteries-save-interprogram-paste-before-kill))
     (should select-enable-clipboard)
+    (should (eq interprogram-paste-function
+                #'emacs-batteries--interprogram-paste))
     (should (memq #'emacs-batteries--maybe-enable-electric-pair
                   after-change-major-mode-hook))
     (should load-prefer-newer)
@@ -976,6 +986,48 @@
     (let ((select-enable-clipboard nil))
       (emacs-batteries-setup)
       (should select-enable-clipboard))))
+
+(ert-deftest emacs-batteries-setup-wraps-interprogram-paste-on-macos ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (interprogram-paste-function #'gui-selection-value))
+      (emacs-batteries-setup)
+      (should (eq interprogram-paste-function
+                  #'emacs-batteries--interprogram-paste))
+      (should (eq emacs-batteries--interprogram-paste-base-function
+                  #'gui-selection-value)))))
+
+(ert-deftest emacs-batteries-interprogram-paste-falls-back-to-finder-files ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system 'ns)
+          (interprogram-paste-function
+           (lambda ()
+             nil)))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'gui-get-selection)
+                 (lambda (_selection target)
+                   (pcase target
+                     ('text/plain
+                      "file:///tmp/hello%20world\nfile:///tmp/second")
+                     (_ nil)))))
+        (should (equal (funcall interprogram-paste-function)
+                       "/tmp/hello world\n/tmp/second"))
+        (should-not (funcall interprogram-paste-function))))))
+
+(ert-deftest emacs-batteries-interprogram-paste-prefers-base-function ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system 'ns)
+          (interprogram-paste-function
+           (lambda ()
+             "plain text")))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'gui-get-selection)
+                 (lambda (&rest _args)
+                   "file:///tmp/ignored")))
+        (should (equal (funcall interprogram-paste-function)
+                       "plain text"))))))
 
 (ert-deftest emacs-batteries-setup-applies-darwin-utf-8-profile ()
   (emacs-batteries-test--with-sandbox
