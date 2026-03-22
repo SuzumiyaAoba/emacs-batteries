@@ -310,11 +310,13 @@ clipboard text saved to the kill ring by character count."
                  integer))
 
 (defcustom emacs-batteries-enable-terminal-clipboard-paste t
-  "Non-nil means enable OSC 52 clipboard paste in terminal Emacs.
+  "Non-nil means enable terminal clipboard paste in terminal Emacs.
 
 When non-nil, xterm-like terminals also allow `yank' to pull from the
-system clipboard.  Disable this if clipboard queries through the terminal
-can block long enough to make `yank' feel slow in your setup."
+system clipboard.  On macOS text terminals, `yank' also falls back to
+`pbpaste' when OSC 52 clipboard queries are unavailable.  Disable this if
+clipboard queries through the terminal can block long enough to make
+`yank' feel slow in your setup."
   :type 'boolean)
 
 (defcustom emacs-batteries-enable-recentf t
@@ -868,14 +870,32 @@ when the same file payload was already returned earlier."
             (setq emacs-batteries--last-macos-file-clipboard-paste text)
             text))))))
 
+(defun emacs-batteries--macos-terminal-clipboard-paste ()
+  "Return macOS clipboard text through `pbpaste' in terminal Emacs.
+Return nil unless terminal clipboard paste is enabled, Emacs is running
+in a text terminal on macOS, and the `pbpaste' program is available."
+  (when (and emacs-batteries-enable-terminal-clipboard-paste
+             (eq system-type 'darwin)
+             (not window-system))
+    (let ((pbpaste (executable-find "pbpaste")))
+      (when pbpaste
+        (with-temp-buffer
+          (when (zerop (process-file pbpaste nil t nil))
+            (let ((text (buffer-string)))
+              (unless (string-empty-p text)
+                text))))))))
+
 (defun emacs-batteries--interprogram-paste ()
-  "Return clipboard text, with a macOS file clipboard fallback.
+  "Return clipboard text, with macOS-specific fallbacks.
 The configured base `interprogram-paste-function' runs first.  On macOS
 GUI Emacs, if it returns nil, Finder file copies are converted to local
-paths so plain `yank' can paste them."
+paths so plain `yank' can paste them.  On macOS terminal Emacs, `pbpaste'
+is used as a final fallback when terminal clipboard queries are not
+available."
   (or (when (functionp emacs-batteries--interprogram-paste-base-function)
         (funcall emacs-batteries--interprogram-paste-base-function))
-      (emacs-batteries--macos-file-clipboard-paste)))
+      (emacs-batteries--macos-file-clipboard-paste)
+      (emacs-batteries--macos-terminal-clipboard-paste)))
 
 (defun emacs-batteries--enable-terminal-clipboard-integration ()
   "Enable OSC 52 clipboard integration on supported text terminals."

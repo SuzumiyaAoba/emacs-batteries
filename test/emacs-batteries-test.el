@@ -1029,6 +1029,42 @@
                        "/tmp/hello world\n/tmp/second"))
         (should-not (funcall interprogram-paste-function))))))
 
+(ert-deftest emacs-batteries-interprogram-paste-falls-back-to-pbpaste-on-macos-tty ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (interprogram-paste-function
+           (lambda ()
+             nil)))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (command)
+                   (and (equal command "pbpaste")
+                        "/usr/bin/pbpaste")))
+                ((symbol-function 'process-file)
+                 (lambda (program infile buffer display &rest args)
+                   (ignore infile display args)
+                   (should (equal program "/usr/bin/pbpaste"))
+                   (princ "from pbpaste"
+                          (if (eq buffer t) (current-buffer) buffer))
+                   0)))
+        (should (equal (funcall interprogram-paste-function)
+                       "from pbpaste"))))))
+
+(ert-deftest emacs-batteries-interprogram-paste-respects-terminal-clipboard-paste-opt-out-on-macos-tty ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (emacs-batteries-enable-terminal-clipboard-paste nil)
+          (interprogram-paste-function
+           (lambda ()
+             nil)))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (_command)
+                   (ert-fail "pbpaste should not be queried when terminal clipboard paste is disabled"))))
+        (should-not (funcall interprogram-paste-function))))))
+
 (ert-deftest emacs-batteries-interprogram-paste-prefers-base-function ()
   (emacs-batteries-test--with-sandbox
     (let ((system-type 'darwin)
