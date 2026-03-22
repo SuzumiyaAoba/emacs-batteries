@@ -6,7 +6,7 @@
 ;; Package-Requires: ((emacs "30.1"))
 ;; Keywords: convenience, files, maint
 ;; URL: https://github.com/SuzumiyaAoba/emacs-batteries
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: MIT
 
 ;;; Commentary:
 
