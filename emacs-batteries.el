@@ -896,7 +896,7 @@ paths so plain `yank' can paste them."
   (unless (eq interprogram-paste-function
               #'emacs-batteries--interprogram-paste)
     (setq emacs-batteries--interprogram-paste-base-function
-          interprogram-paste-function
+          (or interprogram-paste-function #'gui-selection-value)
           interprogram-paste-function
           #'emacs-batteries--interprogram-paste))
   (add-hook 'tty-setup-hook #'emacs-batteries--enable-terminal-clipboard-integration)

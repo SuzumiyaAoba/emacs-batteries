@@ -115,6 +115,7 @@ TRAMP-related handlers temporarily.
 - remove duplicate history entries and raise history length to 1000
 - avoid saving duplicate trailing entries in the `kill-ring`
 - enable `select-enable-clipboard` for system clipboard integration
+- restore the default clipboard paste reader when another setup had disabled it
 - on macOS GUI Emacs, let plain `yank` paste Finder-copied files as local paths
 - save existing clipboard contents to the `kill-ring` before kill commands, with a default 1 MiB size limit
 - prefer short yes/no answers by enabling `use-short-answers`
@@ -530,6 +531,8 @@ This library explicitly enables `select-enable-clipboard`, so GUI Emacs keeps
 kill and yank integrated with the system clipboard on macOS and other window
 systems. In Emacs 30.2 with `emacs -Q`, this is already `t` by default, but
 setting it here keeps the behavior stable when another setup had disabled it.
+It also restores the default `interprogram-paste-function` when another setup
+had set it to `nil`, so plain `C-y` can still pull from the OS clipboard.
 
 On macOS GUI Emacs, this library also makes plain `yank` fall back to Finder
 file copies. When the clipboard currently contains local files copied in

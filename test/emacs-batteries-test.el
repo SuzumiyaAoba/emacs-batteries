@@ -997,6 +997,20 @@
       (should (eq emacs-batteries--interprogram-paste-base-function
                   #'gui-selection-value)))))
 
+(ert-deftest emacs-batteries-setup-restores-default-interprogram-paste-function ()
+  (emacs-batteries-test--with-sandbox
+    (let ((interprogram-paste-function nil))
+      (emacs-batteries-setup)
+      (should (eq interprogram-paste-function
+                  #'emacs-batteries--interprogram-paste))
+      (should (eq emacs-batteries--interprogram-paste-base-function
+                  #'gui-selection-value))
+      (cl-letf (((symbol-function 'gui-selection-value)
+                 (lambda ()
+                   "from clipboard")))
+        (should (equal (funcall interprogram-paste-function)
+                       "from clipboard"))))))
+
 (ert-deftest emacs-batteries-interprogram-paste-falls-back-to-finder-files ()
   (emacs-batteries-test--with-sandbox
     (let ((system-type 'darwin)
