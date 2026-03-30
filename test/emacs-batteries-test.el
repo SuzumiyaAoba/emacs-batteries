@@ -453,17 +453,28 @@
   `(let* ((temp-directory (make-temp-file "emacs-batteries-" t))
           (emacs-batteries-state-directory
            (expand-file-name "state/" temp-directory))
-          (emacs-batteries-custom-file nil))
-     (unwind-protect
-         (progn
-           (emacs-batteries-test--disable-managed-modes)
-           (setq emacs-batteries--deferred-functions nil)
-           (dolist (cell emacs-batteries-test--baseline-values)
-             (set (car cell) (copy-tree (cdr cell))))
-           ,@body)
-       (emacs-batteries-test--disable-managed-modes)
-       (setq emacs-batteries--deferred-functions nil)
-       (delete-directory temp-directory t))))
+          (emacs-batteries-custom-file nil)
+          (exec-path nil)
+          (emacs-batteries-test--fake-clipboard nil))
+     (cl-letf (((symbol-function 'gui-select-text)
+                (lambda (text)
+                  (setq emacs-batteries-test--fake-clipboard text)))
+               ((symbol-function 'gui-selection-value)
+                (lambda ()
+                  emacs-batteries-test--fake-clipboard))
+               ((symbol-function 'gui-get-selection)
+                (lambda (&optional _selection _target)
+                  emacs-batteries-test--fake-clipboard)))
+       (unwind-protect
+           (progn
+             (emacs-batteries-test--disable-managed-modes)
+             (setq emacs-batteries--deferred-functions nil)
+             (dolist (cell emacs-batteries-test--baseline-values)
+               (set (car cell) (copy-tree (cdr cell))))
+             ,@body)
+         (emacs-batteries-test--disable-managed-modes)
+         (setq emacs-batteries--deferred-functions nil)
+         (delete-directory temp-directory t)))))
 
 (defun emacs-batteries-test--fixture-path (path)
   "Expand PATH relative to the repository root."
