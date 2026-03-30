@@ -932,16 +932,15 @@ in a text terminal on macOS, and the `pbpaste' program is available."
 
 (defun emacs-batteries--macos-terminal-clipboard-copy (text)
   "Copy TEXT from terminal Emacs on macOS.
-Prefer OSC 52 when terminal clipboard copy is available.  Otherwise use
-`pbcopy' synchronously so the helper process cannot linger in the
-background waiting for more input."
+Always use `pbcopy' for reliable local clipboard access.  Additionally
+send OSC 52 when the terminal supports it, which helps in remote sessions
+where `pbcopy' would only reach the remote clipboard."
   (when (and (eq system-type 'darwin)
              (not window-system))
     (emacs-batteries--enable-terminal-clipboard-integration)
-    (or (when (eq (terminal-parameter nil 'xterm--set-selection) t)
-          (gui-select-text text)
-          t)
-        (emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy text))))
+    (emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy text)
+    (when (eq (terminal-parameter nil 'xterm--set-selection) t)
+      (gui-select-text text))))
 
 (defun emacs-batteries--interprogram-cut (text)
   "Forward TEXT to the wrapped `interprogram-cut-function'."
