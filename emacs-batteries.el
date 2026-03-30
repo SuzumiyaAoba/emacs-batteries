@@ -908,8 +908,16 @@ in a text terminal on macOS, and the `pbpaste' program is available."
 (defun emacs-batteries--interprogram-cut (text)
   "Forward TEXT to the wrapped `interprogram-cut-function'."
   (setq emacs-batteries--last-interprogram-cut-text text)
-  (when (functionp emacs-batteries--interprogram-cut-base-function)
-    (funcall emacs-batteries--interprogram-cut-base-function text)))
+  (cond
+   ((and (eq system-type 'darwin)
+         (not window-system)
+         (eq emacs-batteries--interprogram-cut-base-function
+             #'gui-select-text))
+    (emacs-batteries--enable-terminal-clipboard-integration)
+    (when (eq (terminal-parameter nil 'xterm--set-selection) t)
+      (gui-select-text text)))
+   ((functionp emacs-batteries--interprogram-cut-base-function)
+    (funcall emacs-batteries--interprogram-cut-base-function text))))
 
 (defun emacs-batteries--interprogram-paste ()
   "Return clipboard text, with macOS-specific fallbacks.

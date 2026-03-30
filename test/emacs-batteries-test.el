@@ -1031,6 +1031,41 @@
       (should (eq emacs-batteries--interprogram-cut-base-function
                   #'gui-select-text)))))
 
+(ert-deftest emacs-batteries-interprogram-cut-skips-gui-select-text-on-macos-tty-without-osc52-copy ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (interprogram-cut-function #'gui-select-text))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'gui-select-text)
+                 (lambda (_text)
+                   (ert-fail "gui-select-text should not run without OSC 52 copy support"))))
+        (funcall interprogram-cut-function "from emacs")))))
+
+(ert-deftest emacs-batteries-interprogram-cut-uses-gui-select-text-on-macos-tty-with-osc52-copy ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (interprogram-cut-function #'gui-select-text)
+          (calls 0)
+          (original-terminal-initted
+           (terminal-parameter nil 'terminal-initted))
+          (original-set-selection
+           (terminal-parameter nil 'xterm--set-selection)))
+      (unwind-protect
+          (progn
+            (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
+            (set-terminal-parameter nil 'xterm--set-selection nil)
+            (emacs-batteries-setup)
+            (cl-letf (((symbol-function 'gui-select-text)
+                       (lambda (text)
+                         (setq calls (1+ calls))
+                         (should (equal text "from emacs")))))
+              (funcall interprogram-cut-function "from emacs")
+              (should (= calls 1))))
+        (set-terminal-parameter nil 'terminal-initted original-terminal-initted)
+        (set-terminal-parameter nil 'xterm--set-selection original-set-selection)))))
+
 (ert-deftest emacs-batteries-interprogram-paste-falls-back-to-finder-files ()
   (emacs-batteries-test--with-sandbox
     (let ((system-type 'darwin)
