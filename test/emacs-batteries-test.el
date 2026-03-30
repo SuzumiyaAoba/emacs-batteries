@@ -956,7 +956,14 @@
           (original-set-selection
            (terminal-parameter nil 'xterm--set-selection))
           (original-get-selection
-           (terminal-parameter nil 'xterm--get-selection)))
+           (terminal-parameter nil 'xterm--get-selection))
+          (process-environment
+           (cl-remove-if
+            (lambda (entry)
+              (string-match-p
+               "\\`\\(TERM_PROGRAM\\|WEZTERM_EXECUTABLE\\|WEZTERM_PANE\\)="
+               entry))
+            process-environment)))
       (unwind-protect
           (progn
             (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
@@ -979,7 +986,42 @@
            (terminal-parameter nil 'xterm--set-selection))
           (original-get-selection
            (terminal-parameter nil 'xterm--get-selection))
+          (process-environment
+           (cl-remove-if
+            (lambda (entry)
+              (string-match-p
+               "\\`\\(TERM_PROGRAM\\|WEZTERM_EXECUTABLE\\|WEZTERM_PANE\\)="
+               entry))
+            process-environment))
           (emacs-batteries-enable-terminal-clipboard-paste nil))
+      (unwind-protect
+          (progn
+            (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
+            (set-terminal-parameter nil 'xterm--set-selection nil)
+            (set-terminal-parameter nil 'xterm--get-selection nil)
+            (emacs-batteries-setup)
+            (should (eq (terminal-parameter nil 'xterm--set-selection) t))
+            (should-not (terminal-parameter nil 'xterm--get-selection)))
+        (set-terminal-parameter nil 'terminal-initted original-terminal-initted)
+        (set-terminal-parameter nil 'xterm--set-selection original-set-selection)
+        (set-terminal-parameter nil 'xterm--get-selection original-get-selection)))))
+
+(ert-deftest emacs-batteries-setup-skips-tty-clipboard-query-on-wezterm ()
+  (emacs-batteries-test--with-sandbox
+    (let ((original-terminal-initted
+           (terminal-parameter nil 'terminal-initted))
+          (original-set-selection
+           (terminal-parameter nil 'xterm--set-selection))
+          (original-get-selection
+           (terminal-parameter nil 'xterm--get-selection))
+          (process-environment
+           (cons "TERM_PROGRAM=WezTerm"
+                 (cl-remove-if
+                  (lambda (entry)
+                    (string-match-p
+                     "\\`\\(TERM_PROGRAM\\|WEZTERM_EXECUTABLE\\|WEZTERM_PANE\\)="
+                     entry))
+                  process-environment))))
       (unwind-protect
           (progn
             (set-terminal-parameter nil 'terminal-initted 'terminal-init-xterm)
@@ -1031,7 +1073,7 @@
       (should (eq emacs-batteries--interprogram-cut-base-function
                   #'gui-select-text)))))
 
-(ert-deftest emacs-batteries-interprogram-cut-skips-gui-select-text-on-macos-tty-without-osc52-copy ()
+(ert-deftest emacs-batteries-interprogram-cut-falls-back-to-pbcopy-on-macos-tty-without-osc52-copy ()
   (emacs-batteries-test--with-sandbox
     (let ((system-type 'darwin)
           (window-system nil)
@@ -1039,7 +1081,18 @@
       (emacs-batteries-setup)
       (cl-letf (((symbol-function 'gui-select-text)
                  (lambda (_text)
-                   (ert-fail "gui-select-text should not run without OSC 52 copy support"))))
+                   (ert-fail "gui-select-text should not run without OSC 52 copy support")))
+                ((symbol-function 'executable-find)
+                 (lambda (command)
+                   (and (equal command "pbcopy")
+                        "/usr/bin/pbcopy")))
+                ((symbol-function 'call-process-region)
+                 (lambda (start end program &optional delete destination display &rest _args)
+                   (ignore delete destination display)
+                   (should (equal program "/usr/bin/pbcopy"))
+                   (should (equal (buffer-substring-no-properties start end)
+                                  "from emacs"))
+                   0)))
         (funcall interprogram-cut-function "from emacs")))))
 
 (ert-deftest emacs-batteries-interprogram-cut-uses-gui-select-text-on-macos-tty-with-osc52-copy ()

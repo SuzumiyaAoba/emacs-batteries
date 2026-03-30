@@ -848,6 +848,20 @@ Existing remote-file transforms are preserved."
   (memq (terminal-parameter nil 'terminal-initted)
         '(terminal-init-xterm terminal-init-screen terminal-init-tmux)))
 
+(defun emacs-batteries--wezterm-terminal-p ()
+  "Return non-nil when Emacs is running inside WezTerm."
+  (or (getenv "WEZTERM_EXECUTABLE")
+      (getenv "WEZTERM_PANE")
+      (equal (getenv "TERM_PROGRAM") "WezTerm")))
+
+(defun emacs-batteries--terminal-clipboard-query-supported-p ()
+  "Return non-nil when OSC 52 clipboard queries are worth enabling.
+WezTerm documents OSC 52 clipboard writes, but says clipboard query
+requests are ignored, so local macOS sessions should use `pbpaste'
+instead of paying the terminal query timeout."
+  (and (emacs-batteries--xterm-like-terminal-p)
+       (not (emacs-batteries--wezterm-terminal-p))))
+
 (defun emacs-batteries--clipboard-file-line-to-path (line)
   "Return a local path decoded from clipboard LINE, or nil.
 Clipboard file data is usually delivered as file URLs, but macOS can
@@ -905,6 +919,30 @@ in a text terminal on macOS, and the `pbpaste' program is available."
                           emacs-batteries--last-interprogram-cut-text nil)
                     text))))))))))
 
+(defun emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy (text)
+  "Copy TEXT to the macOS clipboard synchronously through `pbcopy'."
+  (let ((pbcopy (executable-find "pbcopy")))
+    (when pbcopy
+      (with-temp-buffer
+        (insert text)
+        (let ((coding-system-for-write 'utf-8-unix))
+          (zerop
+           (call-process-region (point-min) (point-max)
+                                pbcopy nil nil nil)))))))
+
+(defun emacs-batteries--macos-terminal-clipboard-copy (text)
+  "Copy TEXT from terminal Emacs on macOS.
+Prefer OSC 52 when terminal clipboard copy is available.  Otherwise use
+`pbcopy' synchronously so the helper process cannot linger in the
+background waiting for more input."
+  (when (and (eq system-type 'darwin)
+             (not window-system))
+    (emacs-batteries--enable-terminal-clipboard-integration)
+    (or (when (eq (terminal-parameter nil 'xterm--set-selection) t)
+          (gui-select-text text)
+          t)
+        (emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy text))))
+
 (defun emacs-batteries--interprogram-cut (text)
   "Forward TEXT to the wrapped `interprogram-cut-function'."
   (setq emacs-batteries--last-interprogram-cut-text text)
@@ -913,9 +951,7 @@ in a text terminal on macOS, and the `pbpaste' program is available."
          (not window-system)
          (eq emacs-batteries--interprogram-cut-base-function
              #'gui-select-text))
-    (emacs-batteries--enable-terminal-clipboard-integration)
-    (when (eq (terminal-parameter nil 'xterm--set-selection) t)
-      (gui-select-text text)))
+    (emacs-batteries--macos-terminal-clipboard-copy text))
    ((functionp emacs-batteries--interprogram-cut-base-function)
     (funcall emacs-batteries--interprogram-cut-base-function text))))
 
@@ -937,7 +973,8 @@ available."
              (emacs-batteries--xterm-like-terminal-p))
     (require 'term/xterm)
     (xterm--init-activate-set-selection)
-    (when emacs-batteries-enable-terminal-clipboard-paste
+    (when (and emacs-batteries-enable-terminal-clipboard-paste
+               (emacs-batteries--terminal-clipboard-query-supported-p))
       (xterm--init-activate-get-selection))))
 
 (defun emacs-batteries--configure-copy ()
