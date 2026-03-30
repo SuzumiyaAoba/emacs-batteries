@@ -930,6 +930,15 @@ in a text terminal on macOS, and the `pbpaste' program is available."
            (call-process-region (point-min) (point-max)
                                 pbcopy nil nil nil)))))))
 
+(defun emacs-batteries--send-osc52-clipboard (text)
+  "Send TEXT to the terminal clipboard via a raw OSC 52 escape sequence.
+This bypasses `gui-select-text' to avoid platform-specific C-level side
+effects that can spawn lingering helper processes on macOS."
+  (let ((encoded (base64-encode-string
+                  (encode-coding-string text 'utf-8-unix) t)))
+    (send-string-to-terminal
+     (format "\e]52;c;%s\e\\" encoded))))
+
 (defun emacs-batteries--macos-terminal-clipboard-copy (text)
   "Copy TEXT from terminal Emacs on macOS.
 Always use `pbcopy' for reliable local clipboard access.  Additionally
@@ -940,7 +949,7 @@ where `pbcopy' would only reach the remote clipboard."
     (emacs-batteries--enable-terminal-clipboard-integration)
     (emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy text)
     (when (eq (terminal-parameter nil 'xterm--set-selection) t)
-      (gui-select-text text))))
+      (emacs-batteries--send-osc52-clipboard text))))
 
 (defun emacs-batteries--interprogram-cut (text)
   "Forward TEXT to the wrapped `interprogram-cut-function'."
