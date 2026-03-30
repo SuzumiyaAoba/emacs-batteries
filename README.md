@@ -118,7 +118,7 @@ TRAMP-related handlers temporarily.
 - restore the default clipboard paste reader when another setup had disabled it
 - on macOS GUI Emacs, let plain `yank` paste Finder-copied files as local paths
 - on macOS terminal Emacs, let plain `yank` fall back to `pbpaste`
-- on macOS terminal Emacs, prefer OSC 52 copy and use synchronous `pbcopy` fallback
+- on macOS terminal Emacs, use `pbcopy` when available and additionally send OSC 52 when supported
 - avoid letting an unchanged macOS terminal clipboard override a newer Emacs kill
 - save existing clipboard contents to the `kill-ring` before kill commands, with a default 1 MiB size limit
 - prefer short yes/no answers by enabling `use-short-answers`
@@ -557,12 +557,13 @@ On macOS terminal Emacs, this library also falls back to the system
 useful for local terminal sessions such as WezTerm on macOS.
 
 WezTerm's documentation says OSC 52 clipboard query requests are ignored, while
-OSC 52 clipboard writes are supported. For that case, this library keeps
-terminal copy on OSC 52 when available, and uses `pbpaste` for local macOS
-terminal paste instead of waiting on ignored terminal clipboard queries.
+OSC 52 clipboard writes are supported. For that case, this library keeps local
+macOS copy on `pbcopy`, also sends OSC 52 when available, and uses `pbpaste`
+for local macOS terminal paste instead of waiting on ignored terminal
+clipboard queries.
 
-If macOS terminal Emacs cannot use OSC 52 clipboard copy, this library falls
-back to `pbcopy` synchronously. That closes stdin immediately and avoids
+The `pbcopy` path uses a pipe with explicit EOF and waits for the helper to
+exit. This matches the common local Emacs macOS setup pattern and avoids
 leaving a `pbcopy` subprocess behind waiting for more input.
 
 When `pbpaste` still shows an older macOS clipboard entry after an Emacs kill

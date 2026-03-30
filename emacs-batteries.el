@@ -920,15 +920,24 @@ in a text terminal on macOS, and the `pbpaste' program is available."
                     text))))))))))
 
 (defun emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy (text)
-  "Copy TEXT to the macOS clipboard synchronously through `pbcopy'."
+  "Copy TEXT to the macOS clipboard synchronously through `pbcopy'.
+Use a pipe and explicit EOF so `pbcopy' does not wait for more input."
   (let ((pbcopy (executable-find "pbcopy")))
     (when pbcopy
-      (with-temp-buffer
-        (insert text)
-        (let ((coding-system-for-write 'utf-8-unix))
-          (zerop
-           (call-process-region (point-min) (point-max)
-                                pbcopy nil nil nil)))))))
+      (let ((process-connection-type nil)
+            proc)
+        (unwind-protect
+            (progn
+              (setq proc (start-process "emacs-batteries-pbcopy" nil pbcopy))
+              (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+              (process-send-string proc text)
+              (process-send-eof proc)
+              (while (process-live-p proc)
+                (accept-process-output proc 0.01))
+              (and (eq (process-status proc) 'exit)
+                   (zerop (process-exit-status proc))))
+          (when (and proc (process-live-p proc))
+            (delete-process proc)))))))
 
 (defun emacs-batteries--send-osc52-clipboard (text)
   "Send TEXT to the terminal clipboard via a raw OSC 52 escape sequence.
@@ -941,9 +950,9 @@ effects that can spawn lingering helper processes on macOS."
 
 (defun emacs-batteries--macos-terminal-clipboard-copy (text)
   "Copy TEXT from terminal Emacs on macOS.
-Always use `pbcopy' for reliable local clipboard access.  Additionally
-send OSC 52 when the terminal supports it, which helps in remote sessions
-where `pbcopy' would only reach the remote clipboard."
+Use `pbcopy' when it is available for reliable local clipboard access.
+Additionally send OSC 52 when the terminal supports it, which helps in
+remote sessions where `pbcopy' would only reach the remote clipboard."
   (when (and (eq system-type 'darwin)
              (not window-system))
     (emacs-batteries--enable-terminal-clipboard-integration)
