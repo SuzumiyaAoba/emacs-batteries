@@ -1064,6 +1064,15 @@
         (should (equal (funcall interprogram-paste-function)
                        "from clipboard"))))))
 
+(ert-deftest emacs-batteries-setup-restores-default-interprogram-cut-function ()
+  (emacs-batteries-test--with-sandbox
+    (let ((interprogram-cut-function nil))
+      (emacs-batteries-setup)
+      (should (eq interprogram-cut-function
+                  #'emacs-batteries--interprogram-cut))
+      (should (eq emacs-batteries--interprogram-cut-base-function
+                  #'gui-select-text)))))
+
 (ert-deftest emacs-batteries-setup-wraps-interprogram-cut-function ()
   (emacs-batteries-test--with-sandbox
     (let ((interprogram-cut-function #'gui-select-text))
@@ -1082,6 +1091,23 @@
       (cl-letf (((symbol-function 'gui-select-text)
                  (lambda (_text)
                    (ert-fail "gui-select-text should not run without OSC 52 copy support")))
+                ((symbol-function 'emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy)
+                 (lambda (text)
+                   (should (equal text "from emacs"))
+                   t)))
+        (funcall interprogram-cut-function "from emacs")))))
+
+(ert-deftest emacs-batteries-interprogram-cut-falls-back-to-pbcopy-when-cut-function-was-disabled ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (interprogram-cut-function nil))
+      (emacs-batteries-setup)
+      (should (eq emacs-batteries--interprogram-cut-base-function
+                  #'gui-select-text))
+      (cl-letf (((symbol-function 'gui-select-text)
+                 (lambda (_text)
+                   (ert-fail "gui-select-text should not run on macOS tty pbcopy fallback")))
                 ((symbol-function 'emacs-batteries--macos-terminal-clipboard-copy-with-pbcopy)
                  (lambda (text)
                    (should (equal text "from emacs"))

@@ -1001,11 +1001,10 @@ available."
         emacs-batteries-save-interprogram-paste-before-kill)
   (when (boundp 'select-enable-clipboard)
     (setq select-enable-clipboard t))
-  (when (and interprogram-cut-function
-             (not (eq interprogram-cut-function
-                      #'emacs-batteries--interprogram-cut)))
+  (unless (eq interprogram-cut-function
+              #'emacs-batteries--interprogram-cut)
     (setq emacs-batteries--interprogram-cut-base-function
-          interprogram-cut-function
+          (or interprogram-cut-function #'gui-select-text)
           interprogram-cut-function
           #'emacs-batteries--interprogram-cut))
   (unless (eq interprogram-paste-function
