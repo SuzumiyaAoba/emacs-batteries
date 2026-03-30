@@ -48,6 +48,7 @@
 (defvar ring-bell-function)
 (defvar backup-by-copying)
 (defvar select-enable-clipboard)
+(defvar interprogram-cut-function)
 (defvar save-interprogram-paste-before-kill)
 (defvar interprogram-paste-function)
 (defvar global-auto-revert-non-file-buffers)
@@ -578,8 +579,17 @@ When nil, all configuration runs synchronously inside
 (defvar emacs-batteries--interprogram-paste-base-function nil
   "Base `interprogram-paste-function' wrapped by emacs-batteries.")
 
+(defvar emacs-batteries--interprogram-cut-base-function nil
+  "Base `interprogram-cut-function' wrapped by emacs-batteries.")
+
 (defvar emacs-batteries--last-macos-file-clipboard-paste nil
   "Last Finder file clipboard payload returned by emacs-batteries.")
+
+(defvar emacs-batteries--last-macos-terminal-clipboard-paste nil
+  "Last `pbpaste' payload observed by emacs-batteries.")
+
+(defvar emacs-batteries--last-interprogram-cut-text nil
+  "Last text Emacs tried to copy through `interprogram-cut-function'.")
 
 (defun emacs-batteries--run-deferred ()
   "Run all deferred configure functions and clean up."
@@ -883,7 +893,23 @@ in a text terminal on macOS, and the `pbpaste' program is available."
           (when (zerop (process-file pbpaste nil t nil))
             (let ((text (buffer-string)))
               (unless (string-empty-p text)
-                text))))))))
+                (let ((previous
+                       emacs-batteries--last-macos-terminal-clipboard-paste))
+                  (if (and emacs-batteries--last-interprogram-cut-text
+                           (equal text previous)
+                           (not (equal text
+                                       emacs-batteries--last-interprogram-cut-text)))
+                      nil
+                    (setq emacs-batteries--last-macos-terminal-clipboard-paste
+                          text
+                          emacs-batteries--last-interprogram-cut-text nil)
+                    text))))))))))
+
+(defun emacs-batteries--interprogram-cut (text)
+  "Forward TEXT to the wrapped `interprogram-cut-function'."
+  (setq emacs-batteries--last-interprogram-cut-text text)
+  (when (functionp emacs-batteries--interprogram-cut-base-function)
+    (funcall emacs-batteries--interprogram-cut-base-function text)))
 
 (defun emacs-batteries--interprogram-paste ()
   "Return clipboard text, with macOS-specific fallbacks.
@@ -913,6 +939,13 @@ available."
         emacs-batteries-save-interprogram-paste-before-kill)
   (when (boundp 'select-enable-clipboard)
     (setq select-enable-clipboard t))
+  (when (and interprogram-cut-function
+             (not (eq interprogram-cut-function
+                      #'emacs-batteries--interprogram-cut)))
+    (setq emacs-batteries--interprogram-cut-base-function
+          interprogram-cut-function
+          interprogram-cut-function
+          #'emacs-batteries--interprogram-cut))
   (unless (eq interprogram-paste-function
               #'emacs-batteries--interprogram-paste)
     (setq emacs-batteries--interprogram-paste-base-function

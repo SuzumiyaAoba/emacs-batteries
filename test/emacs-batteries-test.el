@@ -89,6 +89,7 @@
 (defvar compilation-ask-about-save)
 (defvar save-abbrevs)
 (defvar select-enable-clipboard)
+(defvar interprogram-cut-function)
 (defvar interprogram-paste-function)
 (defvar gnutls-verify-error)
 (defvar gnutls-min-prime-bits)
@@ -169,8 +170,11 @@
 (defvar ediff-keep-variants)
 (defvar native-comp-async-report-warnings-errors)
 (defvar x-underline-at-descent-line)
+(defvar emacs-batteries--interprogram-cut-base-function)
 (defvar emacs-batteries--interprogram-paste-base-function)
 (defvar emacs-batteries--last-macos-file-clipboard-paste)
+(defvar emacs-batteries--last-macos-terminal-clipboard-paste)
+(defvar emacs-batteries--last-interprogram-cut-text)
 
 (defconst emacs-batteries-test--baseline-values
   `((history-length . ,history-length)
@@ -253,6 +257,7 @@
     (kept-old-versions . ,kept-old-versions)
     (kill-do-not-save-duplicates . ,kill-do-not-save-duplicates)
     (select-enable-clipboard . ,select-enable-clipboard)
+    (interprogram-cut-function . ,interprogram-cut-function)
     (interprogram-paste-function . ,interprogram-paste-function)
     (save-interprogram-paste-before-kill
      . ,save-interprogram-paste-before-kill)
@@ -390,10 +395,16 @@
     (native-comp-async-report-warnings-errors
      . ,(and (boundp 'native-comp-async-report-warnings-errors)
              native-comp-async-report-warnings-errors))
+    (emacs-batteries--interprogram-cut-base-function
+     . ,emacs-batteries--interprogram-cut-base-function)
     (emacs-batteries--interprogram-paste-base-function
      . ,emacs-batteries--interprogram-paste-base-function)
     (emacs-batteries--last-macos-file-clipboard-paste
      . ,emacs-batteries--last-macos-file-clipboard-paste)
+    (emacs-batteries--last-macos-terminal-clipboard-paste
+     . ,emacs-batteries--last-macos-terminal-clipboard-paste)
+    (emacs-batteries--last-interprogram-cut-text
+     . ,emacs-batteries--last-interprogram-cut-text)
     (global-text-scale-adjust-resizes-frames
      . ,(and (boundp 'global-text-scale-adjust-resizes-frames)
              global-text-scale-adjust-resizes-frames))
@@ -1011,6 +1022,15 @@
         (should (equal (funcall interprogram-paste-function)
                        "from clipboard"))))))
 
+(ert-deftest emacs-batteries-setup-wraps-interprogram-cut-function ()
+  (emacs-batteries-test--with-sandbox
+    (let ((interprogram-cut-function #'gui-select-text))
+      (emacs-batteries-setup)
+      (should (eq interprogram-cut-function
+                  #'emacs-batteries--interprogram-cut))
+      (should (eq emacs-batteries--interprogram-cut-base-function
+                  #'gui-select-text)))))
+
 (ert-deftest emacs-batteries-interprogram-paste-falls-back-to-finder-files ()
   (emacs-batteries-test--with-sandbox
     (let ((system-type 'darwin)
@@ -1050,6 +1070,37 @@
                    0)))
         (should (equal (funcall interprogram-paste-function)
                        "from pbpaste"))))))
+
+(ert-deftest emacs-batteries-interprogram-paste-does-not-let-stale-pbpaste-beat-recent-kill ()
+  (emacs-batteries-test--with-sandbox
+    (let ((system-type 'darwin)
+          (window-system nil)
+          (kill-ring nil)
+          (kill-ring-yank-pointer nil)
+          (macos-clipboard "from macos")
+          (interprogram-cut-function
+           (lambda (_text)
+             ;; Simulate a broken OSC 52 copy path that leaves macOS clipboard unchanged.
+             nil))
+          (interprogram-paste-function
+           (lambda ()
+             nil)))
+      (emacs-batteries-setup)
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (command)
+                   (and (equal command "pbpaste")
+                        "/usr/bin/pbpaste")))
+                ((symbol-function 'process-file)
+                 (lambda (program infile buffer display &rest args)
+                   (ignore infile display args)
+                   (should (equal program "/usr/bin/pbpaste"))
+                   (princ macos-clipboard
+                          (if (eq buffer t) (current-buffer) buffer))
+                   0)))
+        (kill-new "from emacs")
+        (should (equal (current-kill 0) "from emacs"))
+        (setq macos-clipboard "from wezterm")
+        (should (equal (current-kill 0) "from wezterm"))))))
 
 (ert-deftest emacs-batteries-interprogram-paste-respects-terminal-clipboard-paste-opt-out-on-macos-tty ()
   (emacs-batteries-test--with-sandbox

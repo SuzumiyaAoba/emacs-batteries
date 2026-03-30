@@ -118,6 +118,7 @@ TRAMP-related handlers temporarily.
 - restore the default clipboard paste reader when another setup had disabled it
 - on macOS GUI Emacs, let plain `yank` paste Finder-copied files as local paths
 - on macOS terminal Emacs, let plain `yank` fall back to `pbpaste`
+- avoid letting an unchanged macOS terminal clipboard override a newer Emacs kill
 - save existing clipboard contents to the `kill-ring` before kill commands, with a default 1 MiB size limit
 - prefer short yes/no answers by enabling `use-short-answers`
 - disable dialog boxes by default and use the minibuffer instead
@@ -553,6 +554,12 @@ clipboard when the terminal answers OSC 52 selection queries.
 On macOS terminal Emacs, this library also falls back to the system
 `pbpaste` tool when OSC 52 clipboard queries are unavailable. This is mainly
 useful for local terminal sessions such as WezTerm on macOS.
+
+When `pbpaste` still shows an older macOS clipboard entry after an Emacs kill
+or copy command, this fallback does not override the newer Emacs kill-ring
+entry until the macOS clipboard actually changes again. This avoids stale
+clipboard text winning over a recent Emacs copy when the terminal copy bridge
+is unavailable or misconfigured.
 
 If clipboard queries make `yank` feel slow in your terminal or `tmux` setup,
 set `emacs-batteries-enable-terminal-clipboard-paste` to `nil`. That opt-out
